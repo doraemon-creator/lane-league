@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 
 ROOT = HERE.parent
 load_dotenv(ROOT / ".env")
-load_dotenv(ROOT.parent / ".env")
+load_dotenv(ROOT.parent / ".env", override=not os.getenv("PORTKEY_API_KEY", "").strip())
 os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
 
 from fastapi import FastAPI, HTTPException

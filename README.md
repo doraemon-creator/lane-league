@@ -61,6 +61,10 @@ On the garage, under "Instructions stop at the door," paste:
 
 The firewall stops it. The response says no agent was called and no points moved.
 
+**Show the points guard**, on that same panel, asks what happens if a clerk claims 999,999 points. The board keeps 0. No agent is called.
+
+An empty `PORTKEY_API_KEY` in this folder does not hide a real key in the folder above. The app reads this folder first, then the parent, and ignores a blank value.
+
 ## Tests
 
 ```bash

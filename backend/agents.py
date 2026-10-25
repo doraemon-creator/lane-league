@@ -36,7 +36,7 @@ os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 load_dotenv(ROOT / ".env")
-load_dotenv(ROOT.parent / ".env")
+load_dotenv(ROOT.parent / ".env", override=not os.getenv("PORTKEY_API_KEY", "").strip())
 
 MODEL_NAME = "gpt-6-luna"
 

@@ -1,4 +1,4 @@
-import { mountRace, tally, SCORING } from "./game.js?v=28";
+import { mountRace, tally, SCORING } from "./game.js?v=29";
 
 const state = {
   catalog: [],
@@ -408,9 +408,30 @@ function usageBits(usage) {
   return `Input ${row.input_tokens || 0} · cached input ${row.cache_read_tokens || 0} · output ${row.output_tokens || 0} · $${cost.toFixed(6)}`;
 }
 
+function tracePlain(event) {
+  const title = event.title || "";
+  const raw = event.detail || "";
+  let data = null;
+  try { data = JSON.parse(raw); } catch { data = null; }
+  if (data && title === "scan_text") return data.allowed ? `Allowed the name ${data.text}.` : `Stopped the text. ${data.reason || ""}`;
+  if (data && title === "lookup_vehicle") return `${data.brand || ""} ${data.model || ""}. ${data.line || ""}`.trim();
+  if (data && title === "track_card") return `${data.name}, ${data.weather}.`;
+  if (data && title === "driver_card") return `${data.name}: ${data.races} races, ${data.points} points.`;
+  if (data && title === "ask_rival") return data.brief || "Asked the passenger for one line.";
+  if (data && title === "rival_brief") return `${data.rival_name} in the ${data.vehicle}. ${data.weather}, ${data.track}.`;
+  if (title === "radio") return raw;
+  if (data && title === "race plan") return data.coach_note || data.radio_open || "Plan ready.";
+  if (data && title === "official_result") return `Server score ${data.points}. Finished: ${data.finished ? "yes" : "no"}.`;
+  if (data && title === "commit_result") return `Posted ${data.points}. Board total ${data.total ?? data.points}.`;
+  if (data && title === "standings") return data.rank ? `On the board at rank ${data.rank}.` : "Read the board.";
+  if (data && title === "place_ad") return "Picked a sponsor from the catalog. It is not shown during the minute.";
+  if (data && title === "note") return data.body || data.headline || raw;
+  return String(raw).slice(0, 180);
+}
+
 function traceList(events) {
   if (!events || !events.length) return "";
-  return `<ul class="trace">${events.map((event) => `<li><b>${escapeHtml(event.agent)}</b> ${escapeHtml(event.title)} — ${escapeHtml(event.detail)}</li>`).join("")}</ul>`;
+  return `<ul class="trace">${events.map((event) => `<li><b>${escapeHtml(event.agent)}</b> ${escapeHtml(event.title)} — ${escapeHtml(tracePlain(event))}</li>`).join("")}</ul>`;
 }
 
 async function closeReset(scored, data, endedEarly) {
@@ -456,7 +477,7 @@ async function finish(data, result) {
       crew = `
         <h2>${escapeHtml(clerk.headline || "Minute closed.")}</h2>
         <p>${escapeHtml(clerk.body || "")}</p>
-        <p>The server posted ${posted}. The clerk said ${clerk.model_said ?? "—"}.${clerk.corrected ? " Those numbers did not match, so the board kept the server's." : ""}</p>
+        <p>The clerk said ${clerk.model_said ?? "—"}. The board kept ${posted}.${clerk.corrected ? " Those numbers did not match, so the clerk's number was discarded." : " The two numbers match."}</p>
         <p><b>Before the minute.</b> ${usageBits(openUsage.total)}</p>
         <p><b>After the minute.</b> ${usageBits(closeUsage)}</p>
         ${traceList([...(data.crewTrace || []), ...(saved.trace || [])])}
@@ -605,6 +626,13 @@ $("drill").addEventListener("submit", async (event) => {
   out.textContent = firewall.allowed
     ? "That text can go to the crew as a feeling. No points moved."
     : `${firewall.reason} Agent called: ${data.agent_called}. Points moved: ${data.points_moved}.`;
+});
+$("points-guard").addEventListener("click", async () => {
+  const out = $("drill-out");
+  const response = await fetch("/api/safety/malfunction", { method: "POST" });
+  const data = await response.json().catch(() => ({}));
+  out.classList.add("is-stop");
+  out.textContent = `${data.defense || "The board kept the server total."} The clerk said ${data.model_said}. The board kept ${data.posted}. Agent called: ${data.agent_called}. Points moved: ${data.points_moved}.`;
 });
 
 document.querySelectorAll(".touch button[data-hold]").forEach((button) => {
