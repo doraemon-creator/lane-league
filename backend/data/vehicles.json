@@ -1,7 +1,6 @@
 [
   {
     "id": "ferrari-296",
-    "mode": "supercar",
     "brand": "Ferrari",
     "model": "296 GTB",
     "line": "Sharp nose, low grip. It turns now and slides if you stay flat.",
@@ -14,13 +13,10 @@
     "brake": 34,
     "steer": 1.85,
     "grip": 0.7,
-    "body": 0.11,
-    "stall_speed": 0,
-    "pitch": 0
+    "body": 0.11
   },
   {
     "id": "porsche-911",
-    "mode": "supercar",
     "brand": "Porsche",
     "model": "911 Carrera",
     "line": "The balanced car. Nothing here is a trap.",
@@ -33,13 +29,10 @@
     "brake": 32,
     "steer": 1.6,
     "grip": 0.84,
-    "body": 0.12,
-    "stall_speed": 0,
-    "pitch": 0
+    "body": 0.12
   },
   {
     "id": "aston-vantage",
-    "mode": "supercar",
     "brand": "Aston Martin",
     "model": "Vantage",
     "line": "Long and calm. It holds a line and gives up a little pace.",
@@ -52,13 +45,10 @@
     "brake": 30,
     "steer": 1.45,
     "grip": 0.9,
-    "body": 0.13,
-    "stall_speed": 0,
-    "pitch": 0
+    "body": 0.13
   },
   {
     "id": "mercedes-amg",
-    "mode": "supercar",
     "brand": "Mercedes-AMG",
     "model": "GT",
     "line": "Planted. The wheel is slow, so commit before the bend.",
@@ -71,13 +61,10 @@
     "brake": 31,
     "steer": 1.4,
     "grip": 0.93,
-    "body": 0.13,
-    "stall_speed": 0,
-    "pitch": 0
+    "body": 0.13
   },
   {
     "id": "lamborghini-huracan",
-    "mode": "supercar",
     "brand": "Lamborghini",
     "model": "Huracán",
     "line": "A straight-line car. The tyres let go before the pace does.",
@@ -90,13 +77,10 @@
     "brake": 33,
     "steer": 1.7,
     "grip": 0.68,
-    "body": 0.12,
-    "stall_speed": 0,
-    "pitch": 0
+    "body": 0.12
   },
   {
     "id": "mclaren-750s",
-    "mode": "supercar",
     "brand": "McLaren",
     "model": "750S",
     "line": "Light, sharp, and happy to stop.",
@@ -109,13 +93,10 @@
     "brake": 35,
     "steer": 1.75,
     "grip": 0.8,
-    "body": 0.11,
-    "stall_speed": 0,
-    "pitch": 0
+    "body": 0.11
   },
   {
     "id": "bugatti-chiron",
-    "mode": "supercar",
     "brand": "Bugatti",
     "model": "Chiron",
     "line": "Huge pace, heavy nose. Plan the bend before you arrive.",
@@ -128,13 +109,10 @@
     "brake": 28,
     "steer": 1.15,
     "grip": 0.88,
-    "body": 0.16,
-    "stall_speed": 0,
-    "pitch": 0
+    "body": 0.16
   },
   {
     "id": "koenigsegg-jesko",
-    "mode": "supercar",
     "brand": "Koenigsegg",
     "model": "Jesko",
     "line": "The fastest car here, and the loosest.",
@@ -147,13 +125,10 @@
     "brake": 30,
     "steer": 1.9,
     "grip": 0.6,
-    "body": 0.11,
-    "stall_speed": 0,
-    "pitch": 0
+    "body": 0.11
   },
   {
     "id": "pagani-huayra",
-    "mode": "supercar",
     "brand": "Pagani",
     "model": "Huayra",
     "line": "Brakes and grip first. It stays where you point it.",
@@ -166,13 +141,10 @@
     "brake": 36,
     "steer": 1.7,
     "grip": 0.91,
-    "body": 0.12,
-    "stall_speed": 0,
-    "pitch": 0
+    "body": 0.12
   },
   {
     "id": "audi-r8",
-    "mode": "supercar",
     "brand": "Audi",
     "model": "R8",
     "line": "Friendly. A mistake is cheap.",
@@ -185,13 +157,10 @@
     "brake": 33,
     "steer": 1.55,
     "grip": 0.86,
-    "body": 0.13,
-    "stall_speed": 0,
-    "pitch": 0
+    "body": 0.13
   },
   {
     "id": "nissan-gtr",
-    "mode": "supercar",
     "brand": "Nissan",
     "model": "GT-R",
     "line": "Launch and grip. The nose turns after the power arrives.",
@@ -204,13 +173,10 @@
     "brake": 32,
     "steer": 1.35,
     "grip": 0.96,
-    "body": 0.15,
-    "stall_speed": 0,
-    "pitch": 0
+    "body": 0.15
   },
   {
     "id": "maserati-mc20",
-    "mode": "supercar",
     "brand": "Maserati",
     "model": "MC20",
     "line": "Light and pointy. It changes direction and does not glue down.",
@@ -223,13 +189,10 @@
     "brake": 31,
     "steer": 1.8,
     "grip": 0.76,
-    "body": 0.11,
-    "stall_speed": 0,
-    "pitch": 0
+    "body": 0.11
   },
   {
     "id": "bentley-continental",
-    "mode": "supercar",
     "brand": "Bentley",
     "model": "Continental GT",
     "line": "The slowest and the widest. It holds a line, then runs out of clock.",
@@ -242,13 +205,10 @@
     "brake": 26,
     "steer": 1.05,
     "grip": 0.9,
-    "body": 0.18,
-    "stall_speed": 0,
-    "pitch": 0
+    "body": 0.18
   },
   {
     "id": "corvette-c8",
-    "mode": "supercar",
     "brand": "Chevrolet",
     "model": "Corvette",
     "line": "Strong pace, weak brakes, low grip. Lift early.",
@@ -261,13 +221,10 @@
     "brake": 27,
     "steer": 1.65,
     "grip": 0.66,
-    "body": 0.12,
-    "stall_speed": 0,
-    "pitch": 0
+    "body": 0.12
   },
   {
     "id": "bmw-m8",
-    "mode": "supercar",
     "brand": "BMW",
     "model": "M8",
     "line": "A heavy coupe that stops and sticks. Steering is what you wait on.",
@@ -280,13 +237,10 @@
     "brake": 34,
     "steer": 1.3,
     "grip": 0.92,
-    "body": 0.15,
-    "stall_speed": 0,
-    "pitch": 0
+    "body": 0.15
   },
   {
     "id": "porsche-taycan",
-    "mode": "supercar",
     "brand": "Porsche",
     "model": "Taycan",
     "line": "The strongest launch, and a heavy body after it.",
@@ -299,8 +253,6 @@
     "brake": 35,
     "steer": 1.5,
     "grip": 0.87,
-    "body": 0.15,
-    "stall_speed": 0,
-    "pitch": 0
+    "body": 0.15
   }
 ]

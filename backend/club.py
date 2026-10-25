@@ -1,9 +1,8 @@
-"""Catalog, track, scoring, ads, and the checks that do not trust the model."""
+"""Catalog, track, scoring, and the checks that trust neither the model nor the browser."""
 
 from __future__ import annotations
 
 import json
-import math
 import random
 import re
 from pathlib import Path
@@ -11,9 +10,17 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 DATA = HERE / "data"
 
-SEGMENT_COUNT = 120
 SEGMENT_M = 16
-TRACK_LENGTH_M = SEGMENT_COUNT * SEGMENT_M
+TRACK_SEGMENTS = 200
+TRACK_LENGTH_M = SEGMENT_M * TRACK_SEGMENTS
+TIME_LIMIT = 60
+
+COIN_POINTS = 100
+HURDLE_POINTS = 25
+FINISH_BONUS = 250
+POINT_PER_SECOND = 8
+COIN_REACH = 0.42
+HURDLE_REACH = 0.24
 
 # GPT-6 Luna list prices for a normal-length prompt, in USD per token.
 # Source: genai-prices snapshot shipped with the course tools.
@@ -23,70 +30,42 @@ PRICE_CACHE_READ = 0.01 / 1_000_000
 PRICE_CACHE_WRITE = 0.125 / 1_000_000
 PRICE_OUTPUT = 0.50 / 1_000_000
 
-DAILY_TOKEN_CAP = 80_000
-DAILY_RUN_CAP = 40
+# One ranked minute is about 9,000 tokens and three agent runs.
+DAILY_TOKEN_CAP = 300_000
+DAILY_RUN_CAP = 120
+DRIVER_DAILY_MINUTES = 10
 
-TRACK_NAMES = {
-    "supercar": ["Paper Street", "Harbor Hairpin", "The Cut"],
-    "plane": ["North Ramp", "Coast Corridor", "Stack Four"],
-    "bus": ["Route 12", "Market Loop", "School Hill"],
-}
+PASSENGER_NAME = "Quiet Seat"
+TRACK_NAMES = ["Paper Street", "Harbor Hairpin", "The Cut"]
 
 WEATHER = {
-    "Clear": {"grip": 1.0, "accel": 1.0, "wind": 0.0, "pace": 1.0, "glare": 0},
-    "Wet": {"grip": 0.8, "accel": 0.88, "wind": 0.0, "pace": 0.94, "glare": 0},
-    "Crosswind": {"grip": 1.0, "accel": 1.0, "wind": 0.55, "pace": 0.97, "glare": 0},
-    "Low sun": {"grip": 1.0, "accel": 1.0, "wind": 0.05, "pace": 1.0, "glare": 1},
-}
-
-TEMPERAMENT = {
-    "professor": {"skill": -0.1, "mistake": 0.06, "label": "The Professor"},
-    "local": {"skill": 0.0, "mistake": 0.12, "label": "Quiet company"},
-    "wildcard": {"skill": 0.08, "mistake": 0.28, "label": "The Wildcard"},
-}
-
-RIVAL_NAMES = {
-    "supercar": {"professor": "Gray Lecture", "local": "Quiet Seat", "wildcard": "Red Anon"},
-    "plane": {"professor": "Left Seat", "local": "Tower", "wildcard": "Short Final"},
-    "bus": {"professor": "Route Captain", "local": "The Regular", "wildcard": "Last Stop"},
-}
-
-HOUSE_DRIVERS = [
-    ("Noor Hale", 520, 9, 6, "supercar"),
-    ("Camille Ortiz", 410, 8, 4, "plane"),
-    ("Jonah Pell", 360, 8, 3, "bus"),
-    ("Inez Calder", 300, 6, 3, "supercar"),
-    ("Theo Marsh", 240, 5, 2, "plane"),
-    ("Priya Sen", 190, 5, 1, "bus"),
-    ("Ellis Ward", 120, 3, 1, "supercar"),
-    ("Mara Voss", 70, 2, 0, "plane"),
-]
-
-INJECTION = re.compile(
-    r"(ignore\s+(all\s+|any\s+|the\s+)?(previous|prior|above|instructions)|"
-    r"system\s+prompt|developer\s+message|you\s+are\s+now|"
-    r"<\s*/?\s*(system|instructions|prompt)|"
-    r"api[_\s-]?key|jailbreak|do\s+anything\s+now|"
-    r"set\s+(my\s+)?points|award\s+\d+|give\s+me\s+\d+\s+points|"
-    r"reveal\s+(the\s+)?(prompt|instructions|key)|"
-    r"change\s+the\s+ad|crypto|bitcoin)",
-    re.I,
-)
-
-NAME_OK = re.compile(r"[A-Za-z][A-Za-z .'\-]{1,22}$")
-
-MODE_COACH = {
-    "supercar": "One minute. Put the day down. Steer into the coins and lift before a hurdle.",
-    "plane": "Pitch toward the corridor early, and keep the speed above the stall.",
-    "bus": "Turn in early. The body is wide and the wheel is slow, so a late flick puts you in the grass.",
+    "Clear": {"grip": 1.0, "accel": 1.0, "wind": 0.0, "glare": 0},
+    "Wet": {"grip": 0.8, "accel": 0.88, "wind": 0.0, "glare": 0},
+    "Crosswind": {"grip": 1.0, "accel": 1.0, "wind": 0.55, "glare": 0},
+    "Low sun": {"grip": 1.0, "accel": 1.0, "wind": 0.05, "glare": 1},
 }
 
 WEATHER_COACH = {
     "Clear": "The road is dry.",
-    "Wet": "It is wet, so the same wheel does less.",
+    "Wet": "It is wet, so the same wheel does less. Lift earlier.",
     "Crosswind": "There is a crosswind. Hold a line instead of chasing every push.",
-    "Low sun": "The sun is low. The gates are still where they were.",
+    "Low sun": "The sun is low. The coins are still where they were.",
 }
+
+INJECTION = re.compile(
+    r"(ignore\s+(all\s+|any\s+|the\s+|your\s+)?(previous|prior|above|earlier|instructions|rules)|"
+    r"disregard\s+(all\s+|any\s+|the\s+|your\s+)?(previous|prior|above|earlier|instructions|rules|guidance)|"
+    r"forget\s+(all\s+|your\s+|the\s+)?(previous\s+|prior\s+)?(instructions|rules|guidance|prompt)|"
+    r"new\s+instructions|override\s+(the\s+|your\s+)?(rules|instructions|system)|"
+    r"system\s+(prompt|rules|message)|developer\s+message|you\s+are\s+now|pretend\s+(to\s+be|you\s+are)|"
+    r"<\s*/?\s*(system|instructions|prompt)|"
+    r"api[_\s-]?key|jailbreak|do\s+anything\s+now|"
+    r"set\s+(my\s+)?(points|score)|award\s+\d+|give\s+me\s+\d+\s+points|points\s+(to|=)\s*\d{3,}|"
+    r"reveal\s+(the\s+|your\s+)?(prompt|instructions|key|rules))",
+    re.I,
+)
+
+NAME_OK = re.compile(r"[A-Za-z][A-Za-z .'\-]{1,22}$")
 
 
 def load_json(name: str) -> list[dict]:
@@ -97,10 +76,6 @@ def vehicles() -> list[dict]:
     return load_json("vehicles.json")
 
 
-def ads() -> list[dict]:
-    return load_json("ads.json")
-
-
 def vehicle_by_id(vehicle_id: str) -> dict | None:
     for vehicle in vehicles():
         if vehicle["id"] == vehicle_id:
@@ -108,12 +83,8 @@ def vehicle_by_id(vehicle_id: str) -> dict | None:
     return None
 
 
-def house_names() -> set[str]:
-    return {name.casefold() for name, *_rest in HOUSE_DRIVERS}
-
-
 def normalize_name(name: str) -> str:
-    return " ".join(name.split())
+    return " ".join((name or "").split())
 
 
 def inspect_text(text: str, field: str = "any") -> dict:
@@ -123,28 +94,21 @@ def inspect_text(text: str, field: str = "any") -> dict:
     if INJECTION.search(cleaned):
         return {
             "allowed": False,
-            "reason": "That text is an instruction to the stewards, so it stopped here. No agent was called and no points moved.",
+            "reason": "That text is an instruction to the crew, so it stopped here. No agent was called and no points moved.",
             "text": cleaned[:80],
         }
     if len(cleaned) > 280:
         return {
             "allowed": False,
-            "reason": "That note is too long to be a name or a radio line.",
+            "reason": "That note is too long to be a name or a feeling.",
             "text": cleaned[:80],
         }
-    if field == "name":
-        if not NAME_OK.fullmatch(cleaned):
-            return {
-                "allowed": False,
-                "reason": "Use 2–23 letters for the name on the board.",
-                "text": cleaned[:80],
-            }
-        if cleaned.casefold() in house_names():
-            return {
-                "allowed": False,
-                "reason": "That name is already painted on the club wall.",
-                "text": cleaned[:80],
-            }
+    if field == "name" and not NAME_OK.fullmatch(cleaned):
+        return {
+            "allowed": False,
+            "reason": "Use 2–23 letters for the name on the board.",
+            "text": cleaned[:80],
+        }
     return {"allowed": True, "reason": "", "text": cleaned}
 
 
@@ -156,146 +120,164 @@ def clean_copy(text: str, limit: int = 220) -> str:
     return cleaned[:limit]
 
 
-def recommend_skill(races: int, wins: int, points: int) -> float:
-    if races <= 0:
-        return 0.52
-    win_rate = wins / races
-    form = 0.42 + win_rate * 0.28 + min(points, 500) / 1400
-    return max(0.36, min(0.86, form))
+def pickup_plan() -> list[dict]:
+    """Fourteen coins off the racing line, ten hurdles on it. Same places on every road."""
+    pickups = []
+    for index, seg in enumerate(range(14, TRACK_SEGMENTS - 8, 13)):
+        pickups.append({"seg": seg, "x": -0.55 if index % 2 else 0.55, "kind": "coin"})
+    for seg in range(20, TRACK_SEGMENTS - 10, 18):
+        pickups.append({"seg": seg, "x": 0.0, "kind": "hurdle"})
+    return pickups
 
 
-def skill_band(driver: dict, temperament: str) -> dict:
-    base = recommend_skill(int(driver.get("races") or 0), int(driver.get("wins") or 0), int(driver.get("points") or 0))
-    shift = TEMPERAMENT[temperament]["skill"]
-    recommended = max(0.34, min(0.9, base + shift))
-    return {
-        "recommended": round(recommended, 3),
-        "low": round(max(0.34, recommended - 0.08), 3),
-        "high": round(min(0.9, recommended + 0.08), 3),
-    }
-
-
-def clamp_skill(model_skill: float, band: dict) -> tuple[float, bool]:
-    try:
-        skill = float(model_skill)
-    except (TypeError, ValueError):
-        return band["recommended"], True
-    clamped = min(band["high"], max(band["low"], skill))
-    return round(clamped, 3), abs(clamped - skill) > 0.001
-
-
-def clamp_mistake(model_mistake: float, temperament: str) -> tuple[float, bool]:
-    target = TEMPERAMENT[temperament]["mistake"]
-    low = max(0.02, target - 0.05)
-    high = min(0.4, target + 0.08)
-    try:
-        mistake = float(model_mistake)
-    except (TypeError, ValueError):
-        return target, True
-    clamped = min(high, max(low, mistake))
-    return round(clamped, 3), abs(clamped - mistake) > 0.001
-
-
-def rival_cruise(max_speed: float, skill: float, mistake: float, pace: float) -> float:
-    skill = min(1.0, max(0.0, skill))
-    mistake = min(0.4, max(0.0, mistake))
-    return round(max_speed * (0.75 + 0.16 * skill) * (1 - 0.2 * mistake) * pace, 3)
-
-
-def build_track(mode: str, seed: int) -> dict:
+def build_track(seed: int) -> dict:
+    """The road for one ranked minute. The browser drives it; the server keeps the copy it scores against."""
     rng = random.Random(seed)
     curve = 0.0
     hold = 0
     segments = []
-    for i in range(SEGMENT_COUNT):
+    for i in range(TRACK_SEGMENTS):
         if hold <= 0:
-            curve = rng.choice([-1.0, -0.65, -0.3, 0.0, 0.0, 0.3, 0.65, 1.0])
-            if mode == "bus":
-                curve *= 0.55
-            elif mode == "plane":
-                curve *= 0.75
-            hold = rng.randint(8, 16)
+            curve = rng.choice([-1.0, -0.55, 0.0, 0.0, 0.55, 1.0])
+            hold = rng.randint(8, 15)
         hold -= 1
-        altitude = 0.0
-        if mode == "plane":
-            altitude = math.sin(i / 8.5) * 0.62 + curve * 0.12
-        segments.append(
-            {
-                "curve": round(curve, 3),
-                "altitude": round(altitude, 3),
-                "gate": i % 20 == 10,
-            }
-        )
+        segments.append({"curve": curve, "altitude": 0, "gate": i % 18 == 9})
     weather = rng.choice(list(WEATHER))
-    names = TRACK_NAMES[mode]
     return {
-        "name": names[seed % len(names)],
+        "name": TRACK_NAMES[seed % len(TRACK_NAMES)],
         "weather": weather,
         "seed": seed,
         "segment_m": SEGMENT_M,
         "length_m": TRACK_LENGTH_M,
+        "time_limit": TIME_LIMIT,
         "segments": segments,
+        "pickups": pickup_plan(),
     }
 
 
-COIN_POINTS = 100
-HURDLE_POINTS = 25
-FINISH_BONUS = 250
-POINT_PER_SECOND = 8
-RESET_SECONDS = 60
-MAX_COINS = 14
-MAX_HURDLES = 10
-
-
-def launch_pad(coins: int, hurdles: int, finished: bool, time_left: float) -> dict:
-    """The score the board is allowed to keep. The model does not get a vote."""
-    coins_n = max(0, min(MAX_COINS, int(coins)))
-    hurdles_n = max(0, min(MAX_HURDLES, int(hurdles)))
-    left = max(0.0, min(float(RESET_SECONDS), float(time_left)))
+def score_minute(coins: int, hurdles: int, finished: bool, time_left: float) -> dict:
+    """The arithmetic the board is allowed to keep. The model does not get a vote."""
+    coins_n = max(0, min(14, int(coins)))
+    hurdles_n = max(0, min(10, int(hurdles)))
+    left = max(0.0, min(float(TIME_LIMIT), float(time_left)))
     lab = coins_n * COIN_POINTS
     pen = hurdles_n * HURDLE_POINTS
     finish = FINISH_BONUS if finished else 0
     clock = round(left * POINT_PER_SECOND) if finished else 0
-    total = max(0, lab + finish + clock - pen)
     return {
         "coins": coins_n,
         "hurdles": hurdles_n,
         "finished": bool(finished),
-        "time_left": round(left, 2),
+        "time_left": round(left, 2) if finished else 0.0,
         "lab": lab,
         "pen": pen,
         "finish": finish,
         "clock": clock,
-        "points": total,
-        "beat": bool(finished),
+        "points": max(0, lab + finish + clock - pen),
     }
 
 
-def fallback_coach(mode: str, weather: str, vehicle: dict) -> str:
-    return f"{vehicle['model']}. {MODE_COACH[mode]} {WEATHER_COACH.get(weather, '')}".strip()
+def _num(value) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number == number else None
 
 
-def fallback_radio(temperament: str, vehicle: dict) -> str:
-    label = TEMPERAMENT[temperament]["label"]
-    if temperament == "professor":
-        return f"{label} here. I'll take a clean line in the {vehicle['model']}. Try to match it."
-    if temperament == "wildcard":
-        return f"{label} here. I'm sending the {vehicle['model']} in hot. Don't flinch."
-    return f"{label} in the {vehicle['model']}. One quiet minute. Coins off the line, hurdles on it."
+def recount(samples, track: dict, vehicle: dict) -> dict:
+    """Replay the browser's trail against the server's copy of the road and count what it actually hit."""
+
+    def thrown_out(reason: str) -> dict:
+        return {"ok": False, "reason": reason, "coins": 0, "hurdles": 0, "finished": False, "time_s": None, "time_left": 0.0}
+
+    if not isinstance(samples, list) or len(samples) < 2:
+        return thrown_out("The drive did not send a trail.")
+    if len(samples) > 2600:
+        return thrown_out("The trail was longer than one minute allows.")
+    trail = []
+    for row in samples:
+        if not isinstance(row, dict):
+            return thrown_out("A point in the trail was unreadable.")
+        t, seg, x = _num(row.get("t")), _num(row.get("seg")), _num(row.get("x"))
+        if t is None or seg is None or x is None:
+            return thrown_out("A point in the trail was unreadable.")
+        trail.append((t, seg, x))
+
+    total = len(track["segments"])
+    top_mps = float(vehicle["max_speed"])
+    sideways = float(vehicle["steer"]) + 2.2
+    if trail[0][0] > 0.5 or trail[0][1] > 0.5:
+        return thrown_out("The trail did not start on the grid.")
+    if trail[-1][0] > TIME_LIMIT + 0.1:
+        return thrown_out("The trail ran past one minute.")
+    fastest = 0.0
+    anchor = 0
+    for i, ((t0, s0, x0), (t1, s1, x1)) in enumerate(zip(trail, trail[1:]), start=1):
+        dt = t1 - t0
+        if abs(x1) > 1.66:
+            return thrown_out("The trail left the road envelope.")
+        if dt <= 0 or dt > 1.0:
+            return thrown_out("The trail had a gap in time.")
+        if s1 < s0 - 0.01:
+            return thrown_out("The trail ran backwards.")
+        # Speed and steering are judged over at least 0.08 s, so frame-level rounding cannot fail an honest lap.
+        while trail[i][0] - trail[anchor + 1][0] >= 0.08:
+            anchor += 1
+        span = t1 - trail[anchor][0]
+        if span < 0.08:
+            continue
+        speed = (s1 - trail[anchor][1]) * track["segment_m"] / span
+        if speed > top_mps * 1.03 + 0.5:
+            return thrown_out("The trail was faster than this car can go.")
+        if abs(x1 - trail[anchor][2]) / span > sideways:
+            return thrown_out("The trail moved sideways faster than this car can steer.")
+        fastest = max(fastest, speed)
+
+    taken = {"left": [0, 0], "right": [0, 0]}
+    coins = hurdles = 0
+    hurdles_reached = 0
+    for item in track["pickups"]:
+        crossing = next((point for point in trail if point[1] >= item["seg"]), None)
+        side = "left" if item["x"] < 0 else "right"
+        if crossing is None:
+            continue
+        gap = abs(crossing[2] - item["x"])
+        if item["kind"] == "coin":
+            taken[side][1] += 1
+            if gap < COIN_REACH:
+                coins += 1
+                taken[side][0] += 1
+        else:
+            hurdles_reached += 1
+            if gap < HURDLE_REACH:
+                hurdles += 1
+
+    end_t, end_seg, _ = trail[-1]
+    finished = end_seg >= total - 0.01 and end_t <= TIME_LIMIT
+    return {
+        "ok": True,
+        "reason": "",
+        "coins": coins,
+        "hurdles": hurdles,
+        "finished": finished,
+        "time_s": round(end_t, 2),
+        "time_left": max(0.0, TIME_LIMIT - end_t) if finished else 0.0,
+        "coins_reached": taken["left"][1] + taken["right"][1],
+        "coins_left": taken["left"],
+        "coins_right": taken["right"],
+        "hurdles_reached": hurdles_reached,
+        "distance_m": round(min(end_seg, total) * track["segment_m"]),
+        "top_mph": round(fastest * 2.236936),
+    }
 
 
-def choose_ad(mode: str, placement: str, counts: dict[str, int]) -> dict:
-    catalog = ads()
-    pool = [ad for ad in catalog if mode in ad["modes"] and placement in ad["placements"]]
-    if not pool:
-        pool = [ad for ad in catalog if placement in ad["placements"]]
-    if not pool:
-        pool = catalog[:1]
-    pool = sorted(pool, key=lambda ad: (counts.get(ad["id"], 0), ad["id"]))
-    chosen = dict(pool[0])
-    chosen.pop("modes", None)
-    chosen.pop("placements", None)
-    return chosen
+def fallback_coach(weather: str, vehicle: dict) -> str:
+    return f"{vehicle['brand']} {vehicle['model']}. One minute. Put the day down. Steer into the coins and lift before a hurdle. {WEATHER_COACH.get(weather, '')}".strip()
+
+
+def fallback_radio(vehicle: dict) -> str:
+    return f"{PASSENGER_NAME} in the {vehicle['model']}. One quiet minute. Coins off the line, hurdles on it."
 
 
 def price_usage(input_tokens: int, output_tokens: int, cache_read: int, cache_write: int) -> float:
@@ -309,7 +291,7 @@ def price_usage(input_tokens: int, output_tokens: int, cache_read: int, cache_wr
     return round(cost, 8)
 
 
-def official_points(model_points: int, server_points: int) -> dict:
+def official_points(model_points, server_points: int) -> dict:
     try:
         said = int(model_points)
     except (TypeError, ValueError):
@@ -318,171 +300,30 @@ def official_points(model_points: int, server_points: int) -> dict:
     return {"model_said": said, "posted": posted, "corrected": said != posted}
 
 
-def _as_float(value, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
+ALWAYS_OK_NUMBERS = {8, 10, 14, 25, 60, 100, 250}
+NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 
-def judge_lap(samples: list[dict], vehicle: dict, track: dict, rival_cruise_mps: float, match: str) -> dict:
-    """Score a lap from the recorded trail. The client's own point total is ignored."""
-    notes: list[str] = []
-    segments = track["segments"]
-    segment_m = float(track["segment_m"])
-    max_speed = float(vehicle["max_speed"])
-    mode = vehicle["mode"]
-    empty = {
-        "ok": False,
-        "finished": False,
-        "points": 0,
-        "time_s": 0.0,
-        "breakdown": {"finish": 0, "gates": 0, "clean": 0, "head_to_head": 0, "smooth": 0},
-        "gates_hit": 0,
-        "gates_total": sum(1 for seg in segments if seg["gate"]),
-        "offtrack": 0.0,
-        "beat": False,
-        "notes": ["The watchers did not get a usable lap."],
-    }
-    if not isinstance(samples, list) or len(samples) < 8:
-        return empty
-
-    rows = list(samples[:2000])
-    if len(samples) > 2000:
-        rows.append(samples[-1])
-    parsed = []
-    for row in rows:
-        if not isinstance(row, dict):
-            empty["notes"] = ["A sample in the lap was unreadable."]
-            return empty
-        parsed.append(
-            {
-                "t": _as_float(row.get("t")),
-                "seg": _as_float(row.get("seg")),
-                "x": _as_float(row.get("x")),
-                "alt": _as_float(row.get("alt")),
-                "speed": _as_float(row.get("speed")),
-            }
-        )
-
-    for sample in parsed:
-        if abs(sample["x"]) > 2.2 or abs(sample["alt"]) > 2.2:
-            empty["notes"] = ["The lap left the course envelope, so it was thrown out."]
-            return empty
-
-    for prev, nxt in zip(parsed, parsed[1:]):
-        dt = nxt["t"] - prev["t"]
-        if dt <= 0 or dt > 1.25:
-            empty["notes"] = ["The lap recording had a gap, so it was thrown out."]
-            return empty
-        dseg = nxt["seg"] - prev["seg"]
-        if dseg < -0.35:
-            empty["notes"] = ["The lap ran backwards, so it was thrown out."]
-            return empty
-        if dseg * segment_m / dt > max_speed * 1.28:
-            empty["notes"] = ["That lap was faster than this machine can go, so it was thrown out."]
-            return empty
-
-    end = parsed[-1]
-    finished = end["seg"] >= SEGMENT_COUNT - 0.2
-    time_s = round(end["t"], 3)
-    offtrack_hits = 0
-    jerks = []
-    body = float(vehicle["body"])
-    for prev, nxt in zip(parsed, parsed[1:]):
-        dt = nxt["t"] - prev["t"]
-        if abs(nxt["x"]) + body > 1:
-            offtrack_hits += 1
-        jerks.append(abs(nxt["x"] - prev["x"]) / dt)
-    offtrack = offtrack_hits / max(1, len(parsed) - 1)
-
-    gate_indexes = [i for i, seg in enumerate(segments) if seg["gate"]]
-    hits = 0
-    for index in gate_indexes:
-        near = [sample for sample in parsed if index <= sample["seg"] <= index + 1.4]
-        if not near:
-            continue
-        sample = min(near, key=lambda item: abs(item["seg"] - index))
-        centered = abs(sample["x"]) < 0.58
-        if mode == "plane":
-            target = float(segments[index]["altitude"])
-            centered = centered and abs(sample["alt"] - target) < 0.42 and sample["speed"] >= float(vehicle["stall_speed"]) * 0.98
-        if centered:
-            hits += 1
-
-    breakdown = {"finish": 0, "gates": 0, "clean": 0, "head_to_head": 0, "smooth": 0}
-    if not finished:
-        notes.append("Did not finish the circuit.")
-        return {
-            "ok": True,
-            "finished": False,
-            "points": 0,
-            "time_s": time_s,
-            "breakdown": breakdown,
-            "gates_hit": hits,
-            "gates_total": len(gate_indexes),
-            "offtrack": round(offtrack, 3),
-            "beat": False,
-            "notes": notes,
-        }
-
-    breakdown["finish"] = 45
-    breakdown["gates"] = round(30 * hits / max(1, len(gate_indexes)))
-    breakdown["clean"] = round(20 * (1 - min(1.0, offtrack / 0.28)))
-    if mode == "bus":
-        jerks.sort()
-        median = jerks[len(jerks) // 2] if jerks else 0
-        if median < 0.38:
-            breakdown["smooth"] = 10
-            notes.append("The passengers stayed in their seats.")
-        else:
-            notes.append("The ride was rough. Smooth is worth points in a bus.")
-
-    beat = False
-    if match == "ai" and rival_cruise_mps > 1:
-        rival_time = TRACK_LENGTH_M / rival_cruise_mps
-        beat = time_s < rival_time
-        if beat:
-            breakdown["head_to_head"] = 25
-            notes.append("You were ahead of the rival's pace.")
-        else:
-            notes.append("The rival's pace was quicker.")
-    elif match == "human":
-        notes.append("Head-to-head points wait until the other driver posts a time.")
-
-    total = sum(breakdown.values())
-    return {
-        "ok": True,
-        "finished": True,
-        "points": int(total),
-        "time_s": time_s,
-        "breakdown": breakdown,
-        "gates_hit": hits,
-        "gates_total": len(gate_indexes),
-        "offtrack": round(offtrack, 3),
-        "beat": beat,
-        "rival_time_s": round(TRACK_LENGTH_M / rival_cruise_mps, 3) if rival_cruise_mps > 1 else None,
-        "notes": notes,
-    }
+def numbers_from(value) -> set[int]:
+    """Every whole number inside a tool payload, so a sentence can be checked against it."""
+    found: set[int] = set()
+    if isinstance(value, bool):
+        return found
+    if isinstance(value, (int, float)):
+        found.add(int(round(value)))
+        found.add(int(value))
+    elif isinstance(value, str):
+        found |= {int(float(n.replace(",", ""))) for n in NUMBER.findall(value)}
+    elif isinstance(value, dict):
+        for item in value.values():
+            found |= numbers_from(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            found |= numbers_from(item)
+    return found
 
 
-def apply_head_to_head(your_time: float | None, their_time: float | None, already_paid: bool) -> dict:
-    """Award the duel bonus once both human times exist. Idempotent if already paid."""
-    if already_paid or your_time is None or their_time is None:
-        return {"points": 0, "won": False, "ready": your_time is not None and their_time is not None}
-    won = your_time < their_time
-    return {"points": 25 if won else 0, "won": won, "ready": True}
-
-
-def projection(active_users: int, impressions_each: int = 8) -> dict:
-    """Labeled estimate from the rate card, not money collected."""
-    catalog = ads()
-    blended = sum(ad["cpm"] for ad in catalog) / len(catalog)
-    impressions = active_users * impressions_each
-    return {
-        "active_users": active_users,
-        "impressions_each": impressions_each,
-        "blended_cpm": round(blended, 2),
-        "revenue_usd": round(impressions * blended / 1000, 2),
-        "note": "Estimate from the house rate card. No sponsor has been billed.",
-    }
+def invented_numbers(text: str, allowed: set[int]) -> list[int]:
+    """Numbers in the clerk's copy that no tool handed it."""
+    said = [int(float(n.replace(",", ""))) for n in NUMBER.findall(text or "")]
+    return [n for n in said if n not in allowed and n not in ALWAYS_OK_NUMBERS]

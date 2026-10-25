@@ -72,7 +72,7 @@ body.is-racing .site-header { background: #14110e; border-color: #3a3128; }
 body.is-gate .site-header { display: none; }
 body.is-gate { background: #070709; }
 body.is-gate #main { min-height: 100vh; display: flex; }
-#view-gate.is-on { display: grid; min-height: 100vh; place-items: center; padding: 0; }
+#view-gate.is-on { display: grid; flex: 1; min-height: 100vh; place-items: center; padding: 0; }
 .gate { width: min(440px, 90vw); display: grid; gap: 12px; }
 .gate-mark { font-family: var(--serif); font-size: 1.4rem; letter-spacing: 0.28em; text-transform: uppercase; color: var(--red); }
 .gate label { font-family: var(--mono); font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
@@ -205,7 +205,7 @@ fieldset span { color: var(--muted); }
   display: grid; grid-template-columns: 1fr auto auto; gap: 16px;
   align-items: end; padding: 0 16px 6px; pointer-events: none; color: #f7f1e6;
 }
-.dash-copy { padding-bottom: 18px; max-width: 16rem; }
+.dash-copy { margin-bottom: 12px; max-width: 17rem; padding: 6px 10px; background: rgba(14, 12, 10, 0.72); }
 #dash-brand { font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--car, #e2b034); }
 #dash-model { font-family: var(--serif); font-size: 1.2rem; line-height: 1; }
 #dash-feel { margin-top: 6px; max-width: 16rem; }
@@ -304,10 +304,10 @@ body.is-racing .site-footer { display: none; }
 #hud-speed-needle { stroke: #e2b034; stroke-width: 3; }
 #hud-speed-dot { fill: #e2b034; stroke: #1c1712; stroke-width: 1; }
 .hud-radar {
-  position: absolute; right: 14px; top: 168px; width: 148px;
-  pointer-events: none;
+  position: absolute; right: 14px; top: 118px; width: 118px;
+  pointer-events: none; opacity: 0.85;
 }
-.hud-radar .radar { width: 148px; }
+.hud-radar .radar { width: 118px; }
 .hud-radar .radar-ring, .hud-radar line { stroke: rgba(247, 241, 230, 0.45); }
 .hud-radar .radar-shape { fill: rgba(197, 52, 27, 0.45); stroke: #f3ead7; }
 .hud-radar .radar-label { fill: #f7f1e6; font-size: 16px; }
@@ -349,4 +349,25 @@ body.is-racing .site-footer { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; scroll-behavior: auto !important; }
+}
+
+.radio { transition: opacity 0.6s ease; }
+.radio.is-faded { opacity: 0.22; }
+.close-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: start; margin-top: 8px; }
+.close-grid h2 { margin: 4px 0 10px; }
+.tip { margin: 14px 0; padding: 12px 14px; border-left: 3px solid var(--red); background: var(--card); }
+.tip b { display: block; font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--red); margin-bottom: 4px; }
+.recount td:not(:first-child), .recount th:not(:first-child) { text-align: right; font-family: var(--mono); }
+tr.total td { font-weight: 600; border-top: 1px solid var(--ink); }
+.usage td:last-child { font-family: var(--mono); font-size: 0.9rem; }
+.usage td, .usage th { font-family: var(--mono); font-size: 0.85rem; }
+.usage td:first-child { font-family: var(--sans); }
+.checks { margin: 8px 0 0; padding-left: 1.1rem; }
+.checks li { margin: 4px 0; }
+.crew-trace summary { cursor: pointer; font-family: var(--serif); font-size: 1.3rem; text-transform: uppercase; }
+.crew-trace .trace { counter-reset: none; padding-left: 1.4rem; list-style: decimal; }
+.trace code { font-family: var(--mono); font-size: 0.85rem; color: var(--muted); margin-right: 4px; }
+#view-results .hero-actions { margin-top: 14px; }
+@media (max-width: 900px) {
+  .close-grid { grid-template-columns: 1fr; }
 }

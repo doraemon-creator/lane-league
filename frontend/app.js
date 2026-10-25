@@ -1,9 +1,7 @@
-import { mountRace, tally, SCORING } from "./game.js?v=29";
+import { mountRace, tally, SCORING } from "./game.js?v=31";
 
 const state = {
   catalog: [],
-  modes: [],
-  mode: "supercar",
   vehicleId: "",
   raceCtl: null,
   muted: false,
@@ -56,7 +54,7 @@ function selectedVehicle() {
 }
 
 function carsInGarage() {
-  return state.catalog.filter((car) => car.mode === "supercar");
+  return state.catalog;
 }
 
 function band(car, cars, key) {
@@ -92,7 +90,7 @@ function radarSvg(rows, { labels = true, live = false } = {}) {
   const needle = live
     ? `<line id="hud-speed-needle" x1="120" y1="120" x2="120" y2="120"></line><circle id="hud-speed-dot" cx="120" cy="120" r="5"></circle>`
     : "";
-  return `<svg class="radar${labels ? "" : " is-mini"}" viewBox="-16 -8 272 256" role="img" aria-label="Hexagon of this car. The top point is speed.">
+  return `<svg class="radar${labels ? "" : " is-mini"}" viewBox="-40 -8 320 256" role="img" aria-label="Hexagon of this car. The top point is speed.">
     <polygon class="radar-ring" points="${ring(1)}"></polygon>
     <polygon class="radar-ring" points="${ring(0.66)}"></polygon>
     <polygon class="radar-ring" points="${ring(0.33)}"></polygon>
@@ -224,6 +222,7 @@ function renderGarage() {
 
 const TRACK_LENGTH = 200;
 
+// Same places as the server's road. Practice gets its own curves; a ranked minute drives the server's.
 function pickupPlan() {
   const coins = [];
   const hurdles = [];
@@ -232,7 +231,7 @@ function pickupPlan() {
   return { coins, hurdles };
 }
 
-function buildTrack() {
+function practiceTrack() {
   const segments = [];
   let curve = 0;
   let hold = 0;
@@ -253,27 +252,16 @@ function buildTrack() {
   plan.hurdles.forEach((seg) => {
     pickups.push({ seg, x: 0, kind: "hurdle" });
   });
-  return { name: "Launch Pad", segments, segment_m: 16, pickups, time_limit: SCORING.timeLimit };
+  return { name: "Practice loop", weather: "Clear", segments, segment_m: 16, pickups, time_limit: SCORING.timeLimit };
 }
 
-function localRace(vehicle) {
-  const track = buildTrack();
+function practiceRace(vehicle) {
+  const track = practiceTrack();
   return {
     vehicle,
     track,
-    modifiers: { grip: 1, accel: 1, wind: 0, glare: 0, pace: 1 },
-    card: {
-      match: "solo",
-      rival_name: "",
-      rival_cruise_mps: 0,
-      mistake_rate: 0,
-      line: "center",
-      radio_open: state.practice
-        ? practiceLesson(null)
-        : "Steer into the coins. Dodge the hurdles.",
-      track_name: track.name,
-      weather: "Clear",
-    },
+    modifiers: { grip: 1, accel: 1, wind: 0, glare: 0 },
+    card: { radio_open: practiceLesson(null), track_name: track.name, weather: track.weather },
   };
 }
 
@@ -358,6 +346,7 @@ function paintHud(hud) {
   $("hud-time").classList.toggle("is-low", hud.phase === "run" && hud.timeLeft < 15);
   $("hud-speed").textContent = `${mph} mph`;
   if (state.practice) $("hud-radio").textContent = practiceLesson(hud);
+  else $("hud-radio").classList.toggle("is-faded", hud.phase === "run" && hud.time > 9);
   $("hud-place").textContent = hud.place;
   $("hud-extra").textContent = `${hud.score} pts`;
   $("hud-bar").style.width = `${hud.progress * 100}%`;
@@ -405,7 +394,15 @@ async function loadBoard() {
 function usageBits(usage) {
   const row = usage || {};
   const cost = Number(row.cost_usd || 0);
-  return `Input ${row.input_tokens || 0} · cached input ${row.cache_read_tokens || 0} · output ${row.output_tokens || 0} · $${cost.toFixed(6)}`;
+  return `${Number(row.input_tokens || 0).toLocaleString()} in · ${Number(row.cache_read_tokens || 0).toLocaleString()} cached · ${Number(row.output_tokens || 0).toLocaleString()} out · $${cost.toFixed(6)}`;
+}
+
+function sumUsage(...parts) {
+  const total = { input_tokens: 0, cache_read_tokens: 0, output_tokens: 0, cost_usd: 0 };
+  parts.forEach((part) => {
+    Object.keys(total).forEach((key) => { total[key] += Number((part || {})[key] || 0); });
+  });
+  return total;
 }
 
 function tracePlain(event) {
@@ -413,39 +410,38 @@ function tracePlain(event) {
   const raw = event.detail || "";
   let data = null;
   try { data = JSON.parse(raw); } catch { data = null; }
-  if (data && title === "scan_text") return data.allowed ? `Allowed the name ${data.text}.` : `Stopped the text. ${data.reason || ""}`;
-  if (data && title === "lookup_vehicle") return `${data.brand || ""} ${data.model || ""}. ${data.line || ""}`.trim();
-  if (data && title === "track_card") return `${data.name}, ${data.weather}.`;
-  if (data && title === "driver_card") return `${data.name}: ${data.races} races, ${data.points} points.`;
-  if (data && title === "ask_rival") return data.brief || "Asked the passenger for one line.";
-  if (data && title === "rival_brief") return `${data.rival_name} in the ${data.vehicle}. ${data.weather}, ${data.track}.`;
-  if (title === "radio") return raw;
-  if (data && title === "race plan") return data.coach_note || data.radio_open || "Plan ready.";
-  if (data && title === "official_result") return `Server score ${data.points}. Finished: ${data.finished ? "yes" : "no"}.`;
-  if (data && title === "commit_result") return `Posted ${data.points}. Board total ${data.total ?? data.points}.`;
-  if (data && title === "standings") return data.rank ? `On the board at rank ${data.rank}.` : "Read the board.";
-  if (data && title === "place_ad") return "Picked a sponsor from the catalog. It is not shown during the minute.";
-  if (data && title === "note") return data.body || data.headline || raw;
+  if (data && data.ok === false) return data.error || "Refused.";
+  if (data && title === "lookup_car") return `${data.brand} ${data.model}: ${data.top_mph} mph, grip ${data.grip}, steering ${data.steering}.`;
+  if (data && title === "driver_card") return data.ranked_minutes ? `${data.ranked_minutes} earlier minutes, best ${data.best_minute_points} points.` : "First ranked minute for this driver.";
+  if (data && title === "track_card") return `${data.name}, ${data.weather}. ${data.weather_effect}`;
+  if (data && title === "ask_passenger") return `Handed one sentence to the passenger: “${data.brief}”${data.scan ? "" : " (stopped by the filter)"}`;
+  if (data && title === "passenger_brief") return `Read the car, road, and weather: ${data.car}, ${data.road}, ${data.weather}.`;
+  if (title === "radio") return `“${raw}”`;
+  if (data && title === "plan") return `Coach note: “${data.coach_note}”`;
+  if (data && title === "official_result") return `Read the server's count: ${data.coins_taken} coins, ${data.hurdles_hit} ${data.hurdles_hit === 1 ? "hurdle" : "hurdles"}, ${data.points} points.`;
+  if (data && title === "driver_history") return data.earlier_minutes && data.earlier_minutes.length ? `Read ${data.earlier_minutes.length} earlier minutes. Best so far ${data.best_before_today}.` : "No earlier minutes. This is the first.";
+  if (data && title === "commit_result") return data.duplicate ? "A second post was ignored." : `Posted ${data.points}. Board total ${data.total}.`;
+  if (data && title === "standings") return data.rank ? `Rank ${data.rank} of ${data.drivers_on_board} on the board.` : "Read the board.";
+  if (data && title === "note") return `Wrote the close: “${data.headline}”`;
   return String(raw).slice(0, 180);
 }
 
 function traceList(events) {
   if (!events || !events.length) return "";
-  return `<ul class="trace">${events.map((event) => `<li><b>${escapeHtml(event.agent)}</b> ${escapeHtml(event.title)} — ${escapeHtml(tracePlain(event))}</li>`).join("")}</ul>`;
+  return `<ol class="trace">${events.map((event) => `<li><b>${escapeHtml(event.agent)}</b> <code>${escapeHtml(event.title)}</code> ${escapeHtml(tracePlain(event))}</li>`).join("")}</ol>`;
 }
 
-async function closeReset(scored, data, endedEarly) {
+async function closeReset(samples, result, data) {
   const response = await fetch("/api/reset/close", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       race_id: data.race_id,
       name: state.name,
-      coins: scored.coins,
-      hurdles: scored.hurdles,
-      finished: scored.finished,
-      time_left: scored.timeLeft,
-      ended_early: endedEarly,
+      samples,
+      ended_early: !!result.endedEarly,
+      claimed_coins: result.coins || 0,
+      claimed_hurdles: result.hurdles || 0,
     }),
   });
   const payload = await response.json().catch(() => ({}));
@@ -453,59 +449,109 @@ async function closeReset(scored, data, endedEarly) {
   return payload;
 }
 
-async function finish(data, result) {
-  const scored = tally(result || {});
+function clockLine(scored, endedEarly) {
+  if (scored.finished) return `Crossed the line with ${clock(scored.time_left ?? scored.timeLeft)} still on the clock.`;
+  return endedEarly ? "Ended early. The score is what you had when you stopped." : "The clock hit zero before the finish line.";
+}
+
+function recountTable(saved, mine) {
+  const s = saved.scored;
+  const r = saved.recount || {};
+  return `
+    <table class="recount">
+      <thead><tr><th></th><th>Your screen</th><th>Server recount</th><th>Points</th></tr></thead>
+      <tbody>
+        <tr><td>Coins</td><td>${mine.coins}</td><td>${s.coins} of 14</td><td>+${s.lab}</td></tr>
+        <tr><td>Hurdles</td><td>${mine.hurdles}</td><td>${s.hurdles}</td><td>−${s.pen}</td></tr>
+        <tr><td>Finish</td><td>${mine.finished ? "yes" : "no"}</td><td>${s.finished ? "yes" : "no"}</td><td>+${s.finish}</td></tr>
+        <tr><td>Time left</td><td>${mine.finished ? clock(mine.timeLeft) : "—"}</td><td>${s.finished ? clock(s.time_left) : "—"}</td><td>+${s.clock}</td></tr>
+        <tr class="total"><td>Posted</td><td></td><td></td><td>${s.points}</td></tr>
+      </tbody>
+    </table>
+    <p class="quiet">The server rebuilt this road from its seed and replayed the ${r.ok ? "trail" : "missing or broken trail"} your browser sent. ${r.ok ? `Top speed ${r.top_mph} mph over ${Number(r.distance_m || 0).toLocaleString()} m.` : escapeHtml(r.reason || "")}</p>
+  `;
+}
+
+async function finish(data, samples, result) {
+  const mine = tally(result || {});
   const endedEarly = !!(result && result.endedEarly);
-  const clockLine = scored.finished
-    ? `Finished with ${clock(scored.timeLeft)} still on the clock.`
-    : endedEarly
-      ? "Ended early. The score is what you had when you stopped."
-      : "The clock hit zero before the finish line.";
-  let rankLine = "Practice. No model was called, and this score stays off the board.";
-  let crew = "";
-  if (!state.practice && data.race_id) {
-    try {
-      const saved = await closeReset(scored, data, endedEarly);
-      renderBoard(saved.standings);
-      const clerk = saved.clerk || {};
-      const posted = saved.scored ? saved.scored.points : scored.total;
-      rankLine = clerk.rank_line
-        ? escapeHtml(clerk.rank_line)
-        : `${escapeHtml(state.name)} now has ${saved.total} points.`;
-      const openUsage = data.crewUsage || {};
-      const closeUsage = saved.usage || {};
-      crew = `
-        <h2>${escapeHtml(clerk.headline || "Minute closed.")}</h2>
-        <p>${escapeHtml(clerk.body || "")}</p>
-        <p>The clerk said ${clerk.model_said ?? "—"}. The board kept ${posted}.${clerk.corrected ? " Those numbers did not match, so the clerk's number was discarded." : " The two numbers match."}</p>
-        <p><b>Before the minute.</b> ${usageBits(openUsage.total)}</p>
-        <p><b>After the minute.</b> ${usageBits(closeUsage)}</p>
-        ${traceList([...(data.crewTrace || []), ...(saved.trace || [])])}
-      `;
-    } catch (error) {
-      rankLine = escapeHtml(error.message);
-    }
+  if (state.practice || !data.race_id) {
+    show("results");
+    $("results").innerHTML = `
+      <p class="kicker">Practice · ${escapeHtml(data.track.name)}</p>
+      <h1>${escapeHtml(data.vehicle.brand)} ${escapeHtml(data.vehicle.model)}</h1>
+      <p class="points">${mine.total}</p>
+      <p class="lede">${mine.coins} of ${mine.coinTotal} coins, ${mine.hurdles} hurdles. ${clockLine(mine, endedEarly)}</p>
+      <p class="quiet">Practice. No model was called, and this score stays off the board.</p>
+      ${resultActions()}
+    `;
+    wireResultActions(data);
+    return;
   }
   show("results");
+  $("results").innerHTML = `<p class="kicker">One minute</p><h1>Counting the minute…</h1><p class="lede">The server is replaying your trail. Then the clerk writes the close.</p>`;
+  let saved;
+  try {
+    saved = await closeReset(samples, result || {}, data);
+  } catch (error) {
+    $("results").innerHTML = `<p class="kicker">One minute</p><h1>Not posted</h1><p class="lede">${escapeHtml(error.message)}</p>${resultActions()}`;
+    wireResultActions(data);
+    return;
+  }
+  renderBoard(saved.standings);
+  loadBudget();
+  const clerk = saved.clerk || {};
+  const openUsage = (data.crewUsage || {}).total || {};
+  const closeUsage = saved.usage || {};
+  const whole = sumUsage(openUsage, closeUsage);
+  const trace = [...(data.crewTrace || []), ...(saved.trace || [])];
+  const checks = [...(data.corrections || []), ...(saved.corrections || [])];
   $("results").innerHTML = `
-    <p class="kicker">${state.practice ? "Practice" : "One minute"}</p>
-    <h1>${escapeHtml(data.vehicle.brand)} ${escapeHtml(data.vehicle.model)}</h1>
-    <p class="points">${scored.total}</p>
-    <p class="lede">${scored.coins} coin${scored.coins === 1 ? "" : "s"} collected. Race total ${scored.total}. ${clockLine}</p>
-    <p>${rankLine}</p>
-    <ul class="trace">
-      <li><b>Coins</b> ${scored.coins} of ${scored.coinTotal} × ${SCORING.coin} = ${scored.lab}</li>
-      <li><b>Hurdles</b> ${scored.hurdles} hit × −${SCORING.hurdle} = −${scored.pen}</li>
-      <li><b>Finish</b> ${scored.finished ? `+${scored.finish} for crossing the line in time` : endedEarly ? "0 — ended before the line" : "0 — the clock ran out"}</li>
-      <li><b>Time left</b> ${scored.finished ? `+${scored.clock} (${SCORING.perSecond} points for each second left)` : "0"}</li>
-    </ul>
-    ${crew}
-    <p>Each coin is ${SCORING.coin} points. A hurdle takes ${SCORING.hurdle} away and slows the car. Crossing the line inside ${SCORING.timeLimit} seconds adds ${SCORING.finish}, then ${SCORING.perSecond} more for every second still on the clock.</p>
+    <p class="kicker">One minute · ${escapeHtml(data.track.name)} · ${escapeHtml(data.track.weather)}</p>
+    <h1>${escapeHtml(saved.vehicle.brand)} ${escapeHtml(saved.vehicle.model)}</h1>
+    <div class="close-grid">
+      <div>
+        <p class="points">${saved.scored.points}</p>
+        <h2>${escapeHtml(clerk.headline || "Minute closed.")}</h2>
+        <p class="lede">${escapeHtml(clerk.body || clockLine(saved.scored, endedEarly))}</p>
+        ${clerk.tip ? `<p class="tip"><b>Next minute</b> ${escapeHtml(clerk.tip)}</p>` : ""}
+        <p>${escapeHtml(clerk.rank_line || (saved.rank ? `Rank ${saved.rank} on the board.` : ""))}</p>
+        <p class="quiet">${clerk.fallback
+          ? `No model was called for this close; it is a house card. The board kept the server's ${saved.scored.points}.`
+          : `The clerk said ${clerk.model_said ?? "—"}. The board kept ${saved.scored.points}.${clerk.corrected ? " They did not match, so the clerk's number was discarded." : " They match."}`}</p>
+      </div>
+      <div>${recountTable(saved, mine)}</div>
+    </div>
+    <article class="sheet">
+      <p class="kicker">What this minute cost</p>
+      <table class="usage">
+        <tbody>
+          <tr><td>Before the drive · steward + passenger${data.crewSeconds ? ` · ${data.crewSeconds}s` : ""}</td><td>${usageBits(openUsage)}</td></tr>
+          <tr><td>After the drive · clerk${saved.seconds ? ` · ${saved.seconds}s` : ""}</td><td>${usageBits(closeUsage)}</td></tr>
+          <tr class="total"><td>This ranked minute</td><td>${usageBits(whole)}</td></tr>
+        </tbody>
+      </table>
+    </article>
+    ${checks.length ? `<article class="sheet"><p class="kicker">Server checks on this minute</p><ul class="checks">${checks.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul></article>` : ""}
+    <details class="sheet crew-trace">
+      <summary>What the crew did · ${trace.length} ${trace.length === 1 ? "step" : "steps"}</summary>
+      ${traceList(trace)}
+    </details>
+    ${resultActions()}
+  `;
+  wireResultActions(data);
+}
+
+function resultActions() {
+  return `
+    <p class="quiet">A coin is ${SCORING.coin}. A hurdle takes ${SCORING.hurdle} away and slows the car. Crossing the line inside ${SCORING.timeLimit} seconds adds ${SCORING.finish}, then ${SCORING.perSecond} for every second left.</p>
     <div class="hero-actions">
       <button type="button" class="solid" id="again">${state.practice ? "Practice again" : "Drive again"}</button>
       <button type="button" class="ghost" id="back">Garage</button>
-    </div>
-  `;
+    </div>`;
+}
+
+function wireResultActions(data) {
   $("again").onclick = () => drive(data.vehicle, state.practice);
   $("back").onclick = () => show("garage");
 }
@@ -524,22 +570,16 @@ async function drive(vehicle = selectedVehicle(), practice = false) {
     show("gate");
     return;
   }
-  const data = localRace(vehicle);
+  let data = practiceRace(vehicle);
   if (!practice) {
     $("drive").disabled = true;
-    $("garage-status").textContent = "The steward is clearing one minute. Stay here.";
+    $("garage-status").textContent = "The steward is reading your car and the road. About ten seconds.";
     $("garage-status").classList.remove("is-alert");
     try {
       const response = await fetch("/api/race/prepare", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: state.name,
-          vehicle_id: vehicle.id,
-          match: "ai",
-          temperament: "local",
-          note: ($("mind").value || "").trim(),
-        }),
+        body: JSON.stringify({ name: state.name, vehicle_id: vehicle.id, note: ($("mind").value || "").trim() }),
       });
       const prep = await response.json().catch(() => ({}));
       if (!response.ok || prep.ok === false) {
@@ -548,14 +588,23 @@ async function drive(vehicle = selectedVehicle(), practice = false) {
         toast(prep.agent_called === false ? "Stopped before any model call." : "The crew could not open that minute.");
         return;
       }
-      data.race_id = prep.race_id;
-      data.crewTrace = prep.trace || [];
-      data.crewUsage = prep.usage || {};
-      const coach = prep.card.coach_note || "";
-      const radio = prep.card.radio_open || "";
-      data.card.radio_open = [coach, radio].filter(Boolean).join(" ") || data.card.radio_open;
-      data.card.track_name = prep.card.track_name || data.card.track_name;
-      data.card.weather = prep.card.weather || "Clear";
+      data = {
+        vehicle: prep.vehicle,
+        track: prep.track,
+        modifiers: prep.modifiers,
+        race_id: prep.race_id,
+        crewTrace: prep.trace || [],
+        crewUsage: prep.usage || {},
+        crewSeconds: prep.seconds,
+        corrections: prep.corrections || [],
+        card: {
+          radio_open: [prep.card.coach_note, prep.card.radio_open].filter(Boolean).join(" "),
+          track_name: prep.card.track_name,
+          weather: prep.card.weather,
+          fallback: !prep.crew,
+        },
+      };
+      $("garage-status").textContent = "Car selected. Drive for rank counts. Practice does not.";
     } catch (error) {
       $("garage-status").textContent = "The crew is not reachable. Practice still works.";
       $("garage-status").classList.add("is-alert");
@@ -567,9 +616,9 @@ async function drive(vehicle = selectedVehicle(), practice = false) {
   show("race");
   window.scrollTo(0, 0);
   $("hud-name").textContent = `${vehicle.brand} ${vehicle.model}`;
-  $("hud-trait").textContent = vehicle.line;
-  $("hud-track").textContent = data.card.track_name;
+  $("hud-track").textContent = `${data.card.track_name} · ${data.card.weather}`;
   $("hud-radio").textContent = data.card.radio_open;
+  $("hud-radio").classList.remove("is-faded");
   $("hud-time").textContent = clock(SCORING.timeLimit);
   $("hud-speed").textContent = "0 mph";
   $("hud-place").textContent = "Coins 0";
@@ -580,10 +629,30 @@ async function drive(vehicle = selectedVehicle(), practice = false) {
   mountDash(vehicle);
   state.raceCtl = mountRace($("track"), data, {
     onFrame: (hud) => paintHud(hud),
-    onFinish: (_samples, result) => finish(data, result),
+    onFinish: (samples, result) => finish(data, samples, result),
   });
   state.raceCtl.start();
   state.raceCtl.setMuted(state.muted);
+}
+
+async function loadBudget() {
+  try {
+    const response = await fetch(`/api/budget?name=${encodeURIComponent(state.name || "")}`);
+    if (!response.ok) return;
+    const data = await response.json();
+    const today = data.today || {};
+    const rows = data.minutes || [];
+    $("budget").innerHTML = `
+      <p>Today: <b>${Number(today.tokens || 0).toLocaleString()}</b> of ${Number(data.token_cap).toLocaleString()} tokens · ${today.runs || 0} of ${data.run_cap} agent runs · $${Number(today.cost_usd || 0).toFixed(4)}.
+      ${state.name ? `${escapeHtml(state.name)} has used ${data.driver_minutes_today} of ${data.driver_cap} crewed minutes today.` : ""}</p>
+      <p class="quiet">Past either cap the minute still opens, on a house card, and no model is called.</p>
+      ${rows.length ? `<table class="usage"><thead><tr><th>Ranked minute</th><th>Input</th><th>Cached</th><th>Output</th><th>Cost</th><th>Crew time</th></tr></thead><tbody>
+        ${rows.map((row) => `<tr><td>${escapeHtml(row.player || "")} · ${escapeHtml((row.created || "").slice(11, 16))} UTC</td><td>${Number(row.input_tokens).toLocaleString()}</td><td>${Number(row.cache_read).toLocaleString()}</td><td>${Number(row.output_tokens).toLocaleString()}</td><td>$${Number(row.cost_usd).toFixed(6)}</td><td>${row.seconds}s</td></tr>`).join("")}
+      </tbody></table>` : "<p class=\"quiet\">No ranked minutes yet today.</p>"}
+    `;
+  } catch {
+    $("budget").textContent = "The budget is not reachable right now.";
+  }
 }
 
 $("drive").addEventListener("click", () => drive(selectedVehicle(), false));
@@ -602,6 +671,7 @@ $("gate").addEventListener("submit", (event) => {
   localStorage.setItem("lane-name", name);
   $("driver-chip").textContent = name;
   show("garage");
+  loadBudget();
 });
 $("show-board").addEventListener("click", () => {
   show("garage");
@@ -659,11 +729,10 @@ $("end-race").addEventListener("click", () => {
 });
 
 const FALLBACK = {
-  modes: [{ id: "supercar", title: "Supercar" }],
   vehicles: [
-    { id: "ferrari-296", mode: "supercar", brand: "Ferrari", model: "296 GTB", line: "Sharp nose, low grip.", character: "It turns now and slides if you stay flat.", color: "#b42318", image: "/static/cars/ferrari-296.jpg", max_speed: 80, accel: 26, brake: 34, steer: 1.85, grip: 0.7, body: 0.11 },
-    { id: "porsche-taycan", mode: "supercar", brand: "Porsche", model: "Taycan", line: "The strongest launch.", character: "It is at pace before the others clear the pad.", color: "#e8e4dc", image: "/static/cars/porsche-taycan.jpg", max_speed: 76, accel: 32, brake: 35, steer: 1.5, grip: 0.87, body: 0.15 },
-    { id: "bentley-continental", mode: "supercar", brand: "Bentley", model: "Continental GT", line: "The slowest and the widest.", character: "Stable, then the clock runs out.", color: "#1f4d3a", image: "/static/cars/bentley-continental.jpg", max_speed: 68, accel: 16, brake: 26, steer: 1.05, grip: 0.9, body: 0.18 },
+    { id: "ferrari-296", brand: "Ferrari", model: "296 GTB", line: "Sharp nose, low grip.", character: "It turns now and slides if you stay flat.", color: "#b42318", image: "/static/cars/ferrari-296.jpg", max_speed: 80, accel: 26, brake: 34, steer: 1.85, grip: 0.7, body: 0.11 },
+    { id: "porsche-taycan", brand: "Porsche", model: "Taycan", line: "The strongest launch.", character: "It is at pace before the others clear the pad.", color: "#e8e4dc", image: "/static/cars/porsche-taycan.jpg", max_speed: 76, accel: 32, brake: 35, steer: 1.5, grip: 0.87, body: 0.15 },
+    { id: "bentley-continental", brand: "Bentley", model: "Continental GT", line: "The slowest and the widest.", character: "Stable, then the clock runs out.", color: "#1f4d3a", image: "/static/cars/bentley-continental.jpg", max_speed: 68, accel: 16, brake: 26, steer: 1.05, grip: 0.9, body: 0.18 },
   ],
 };
 
@@ -672,14 +741,13 @@ async function loadCatalog() {
     const response = await fetch("/api/catalog");
     if (!response.ok) throw new Error("catalog");
     const data = await response.json();
-    state.catalog = data.vehicles.filter((car) => car.mode === "supercar");
-    state.modes = data.modes.filter((mode) => mode.id === "supercar");
+    state.catalog = data.vehicles;
   } catch {
     state.catalog = FALLBACK.vehicles;
-    state.modes = FALLBACK.modes;
   }
   renderGarage();
 }
 
 loadCatalog();
 loadBoard();
+loadBudget();

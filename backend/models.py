@@ -8,60 +8,20 @@ from pydantic import BaseModel, Field
 class PrepareIn(BaseModel):
     name: str
     vehicle_id: str
-    match: str = "ai"
-    temperament: str = "local"
-    waiter_id: str = ""
-    session_id: str = ""
     note: str = ""
 
 
-class FinishIn(BaseModel):
+class CloseIn(BaseModel):
     race_id: str
     name: str
     samples: list[dict] = Field(default_factory=list)
-    session_id: str = ""
-
-
-class CheckIn(BaseModel):
-    name: str
-    session_id: str = ""
-
-
-class JoinIn(BaseModel):
-    name: str
-    vehicle_id: str
-
-
-class StateIn(BaseModel):
-    name: str
-    seg: float = 0
-    x: float = 0
-    alt: float = 0
-    speed: float = 0
-    finished: bool = False
-
-
-class ResetClose(BaseModel):
-    race_id: str
-    name: str
-    coins: int = 0
-    hurdles: int = 0
-    finished: bool = False
-    time_left: float = 0
     ended_early: bool = False
-
-
-class ScoreIn(BaseModel):
-    name: str
-    points: int = 0
-    coins: int = 0
-    hurdles: int = 0
-    finished: bool = False
-    time_s: float = 0
-    vehicle_id: str = ""
+    # What the browser counted. Shown next to the server's recount, never posted.
+    claimed_coins: int = 0
+    claimed_hurdles: int = 0
 
 
 class DrillIn(BaseModel):
     name: str = ""
     text: str
-    field: str = "name"
+    field: str = "brief"

@@ -3,6 +3,6 @@
 .venv/
 __pycache__/
 .pytest_cache/
-backend/data/league.db
-backend/data/league.db-*
+backend/data/*.db
+backend/data/*.db-*
 *.pyc
