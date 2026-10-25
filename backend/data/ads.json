@@ -1,0 +1,66 @@
+[
+  {
+    "id": "harbor-rind",
+    "sponsor": "Harbor & Rind",
+    "line": "Coffee for the early grid. Roasted before the stewards open the door.",
+    "cpm": 6.0,
+    "modes": ["supercar", "plane", "bus"],
+    "placements": ["clubhouse", "results", "checkin"]
+  },
+  {
+    "id": "paper-lap",
+    "sponsor": "Paper Lap",
+    "line": "A notebook with a column for time, gates, and who you raced.",
+    "cpm": 5.5,
+    "modes": ["supercar", "plane", "bus"],
+    "placements": ["clubhouse", "garage", "results", "checkin"]
+  },
+  {
+    "id": "low-gear-wool",
+    "sponsor": "Low Gear Wool",
+    "line": "Driving gloves for people who actually turn the wheel.",
+    "cpm": 11.0,
+    "modes": ["supercar"],
+    "placements": ["garage", "results"]
+  },
+  {
+    "id": "night-ramp",
+    "sponsor": "Night Ramp",
+    "line": "Lamps and lenses. See the corner before the car does.",
+    "cpm": 9.0,
+    "modes": ["supercar", "bus"],
+    "placements": ["garage", "results"]
+  },
+  {
+    "id": "keel-instruments",
+    "sponsor": "Keel Instruments",
+    "line": "Altimeters and kneeboards for the corridor, not the gift shop.",
+    "cpm": 12.0,
+    "modes": ["plane"],
+    "placements": ["garage", "results"]
+  },
+  {
+    "id": "county-fare",
+    "sponsor": "County Fare",
+    "line": "Fleet catering. The passengers eat even when the driver is late.",
+    "cpm": 8.0,
+    "modes": ["bus"],
+    "placements": ["garage", "results"]
+  },
+  {
+    "id": "stack-four",
+    "sponsor": "Stack Four",
+    "line": "Headsets that keep tower in one ear and the club in the other.",
+    "cpm": 10.0,
+    "modes": ["plane"],
+    "placements": ["clubhouse", "garage", "checkin"]
+  },
+  {
+    "id": "route-chalk",
+    "sponsor": "Route Chalk",
+    "line": "Depot chalkboards. The old way to post a timetable, still readable.",
+    "cpm": 4.5,
+    "modes": ["bus"],
+    "placements": ["clubhouse", "results", "checkin"]
+  }
+]

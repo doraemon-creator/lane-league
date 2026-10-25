@@ -1,0 +1,8 @@
+.env
+.DS_Store
+.venv/
+__pycache__/
+.pytest_cache/
+backend/data/league.db
+backend/data/league.db-*
+*.pyc
